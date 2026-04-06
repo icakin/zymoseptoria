@@ -7,6 +7,8 @@
 .Rproj.user/
 
 # Large model objects — tracked separately if needed
+models/**/*.rds
+models/**/*.RData
 models/*.rds
 models/*.RData
 
