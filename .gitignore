@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# R session files
+.RData
+.Rhistory
+.Rproj.user/
+
+# Large model objects — tracked separately if needed
+models/*.rds
+models/*.RData
+
+# Generated outputs (reproducible from scripts)
+tables/
+figures/
