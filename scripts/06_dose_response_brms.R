@@ -7,6 +7,13 @@
 # Zero-concentration controls retained throughout.
 #
 # Reports EC50 and pEC50 following Srinivasan & Lloyd (2024, J. Med. Chem.).
+#
+# Bliss Independence analysis (classical formulation):
+#   Two stressors: temperature stress (deviation from T_opt) and fungicide.
+#   Under independence: f_expected(T, conc) = f_T(T) × f_F(conc)
+#   where f_T = fractional effect of temperature alone,
+#         f_F = fractional effect of fungicide alone (measured at T_opt).
+#   delta = f_observed - f_expected; delta < 0 → synergy, delta > 0 → antagonism.
 # =============================================================================
 
 # Source shared config (works interactively in RStudio, via source(), or from CLI)
@@ -17,7 +24,7 @@
 } else {
   tryCatch(dirname(sys.frame(1)$ofile), error = function(e) getwd())
 }
-source(file.path(.this_dir, "00_config.R"))
+source("scripts/00_config.R")
 
 suppressPackageStartupMessages({
   library(brms)
@@ -214,9 +221,9 @@ reconstruct_param <- function(model, param) {
   contrast_names <- paste0("b_", param, "_temperature",
                            c("18", "21", "24", "26", "27", "28"))
   all_names <- c(int_name, contrast_names)
-
+  
   draws <- model %>% spread_draws(!!!syms(all_names))
-
+  
   draws %>%
     mutate(
       val_15 = !!sym(int_name),
@@ -272,7 +279,7 @@ write_csv(hill_param_tbl, file.path(tab_dir, "03_hill_parameters_by_temperature.
 # --- 04: EC50 by temperature -------------------------------------------------
 
 p04 <- ggplot(ec50_summary, aes(x = temperature, y = EC50,
-                                 colour = temperature)) +
+                                colour = temperature)) +
   geom_pointinterval(aes(ymin = EC50_lower, ymax = EC50_upper), size = 3) +
   scale_colour_manual(values = temp_pal, guide = "none") +
   labs(
@@ -288,7 +295,7 @@ ggsave(file.path(fig_dir, "04_ec50_by_temperature.png"),
 # --- 05: EC50 posterior densities --------------------------------------------
 
 p05 <- ggplot(ec50_draws, aes(x = value, fill = temperature,
-                               colour = temperature)) +
+                              colour = temperature)) +
   geom_density(alpha = 0.35, linewidth = 0.6) +
   scale_fill_manual(values = temp_pal, name = "Temperature (°C)") +
   scale_colour_manual(values = temp_pal, name = "Temperature (°C)") +
@@ -319,7 +326,7 @@ ggsave(file.path(fig_dir, "06_hill_n_by_temperature.png"),
 # --- 07: Hill n posterior densities ------------------------------------------
 
 p07 <- ggplot(n_draws, aes(x = value, fill = temperature,
-                            colour = temperature)) +
+                           colour = temperature)) +
   geom_density(alpha = 0.35, linewidth = 0.6) +
   scale_fill_manual(values = temp_pal, name = "Temperature (°C)") +
   scale_colour_manual(values = temp_pal, name = "Temperature (°C)") +
@@ -459,7 +466,7 @@ ggsave(file.path(fig_dir, "12_pp_check.png"),
 # =============================================================================
 
 p13 <- ggplot(ec50_summary, aes(y = temperature, x = EC50,
-                                 colour = temperature)) +
+                                colour = temperature)) +
   geom_pointinterval(aes(xmin = EC50_lower, xmax = EC50_upper),
                      size = 4, linewidth = 1.2) +
   scale_colour_manual(values = temp_pal, guide = "none") +
@@ -516,7 +523,7 @@ write_csv(pec50_report, file.path(tab_dir, "04_pec50_by_temperature.csv"))
 # --- 14: pEC50 by temperature — primary result figure -------------------------
 
 p14 <- ggplot(pec50_summary, aes(y = temperature, x = pEC50,
-                                  colour = temperature)) +
+                                 colour = temperature)) +
   geom_pointinterval(aes(xmin = pEC50_lower, xmax = pEC50_upper),
                      size = 4, linewidth = 1.2) +
   scale_colour_manual(values = temp_pal, guide = "none") +
@@ -540,7 +547,7 @@ ggsave(file.path(fig_dir, "14_pec50_by_temperature.png"),
 # --- 15: pEC50 posterior densities --------------------------------------------
 
 p15 <- ggplot(pec50_draws, aes(x = pec50, fill = temperature,
-                                colour = temperature)) +
+                               colour = temperature)) +
   geom_density(alpha = 0.35, linewidth = 0.6) +
   scale_fill_manual(values = temp_pal, name = "Temperature (°C)") +
   scale_colour_manual(values = temp_pal, name = "Temperature (°C)") +
@@ -556,7 +563,7 @@ ggsave(file.path(fig_dir, "15_pec50_posterior_density.png"),
 # --- 16: pEC50 forest plot (mean +/- SD) --------------------------------------
 
 p16 <- ggplot(pec50_report, aes(y = temperature, x = pEC50_mean,
-                                 colour = temperature)) +
+                                colour = temperature)) +
   geom_point(size = 3) +
   geom_errorbar(aes(xmin = pEC50_mean - pEC50_sd,
                     xmax = pEC50_mean + pEC50_sd),
@@ -590,7 +597,7 @@ pairwise_results <- map_dfr(pairs, function(pair) {
   draws_a <- pec50_draws %>% filter(temperature == pair[1]) %>% pull(pec50)
   draws_b <- pec50_draws %>% filter(temperature == pair[2]) %>% pull(pec50)
   diff <- draws_a - draws_b
-
+  
   tibble(
     temp_A      = pair[1],
     temp_B      = pair[2],
@@ -617,7 +624,7 @@ all_temps_f17 <- levels(pec50_draws$temperature)
 pair_matrix <- bind_rows(
   pairwise_results %>% select(temp_A, temp_B, prob_A_gt_B),
   pairwise_results %>% transmute(temp_A = temp_B, temp_B = temp_A,
-                                  prob_A_gt_B = prob_B_gt_A),
+                                 prob_A_gt_B = prob_B_gt_A),
   tibble(temp_A = all_temps_f17, temp_B = all_temps_f17,
          prob_A_gt_B = NA_real_)
 ) %>%
@@ -661,9 +668,9 @@ summary_table <- pec50_report %>%
   mutate(
     pEC50_report = sprintf("%.2f \u00b1 %.2f", pEC50_mean, pEC50_sd),
     EC50_mg_L_report = sprintf("%.2f [%.2f, %.2f]",
-                                EC50_mg_L_median,
-                                EC50_mg_L_lower,
-                                EC50_mg_L_upper)
+                               EC50_mg_L_median,
+                               EC50_mg_L_lower,
+                               EC50_mg_L_upper)
   ) %>%
   select(temperature, pEC50_report, EC50_mg_L_report,
          pEC50_mean, pEC50_sd, pEC50_median, pEC50_lower, pEC50_upper,
@@ -755,7 +762,7 @@ pec50_plot_data <- pec50_report %>%
 
 # Vertical separator position: between 28 and Global (7.5 on numeric scale)
 pb_growth <- ggplot(pec50_plot_data, aes(x = temperature, y = pEC50_mean,
-                                          colour = temperature)) +
+                                         colour = temperature)) +
   geom_vline(xintercept = 7.5, linetype = "dashed", colour = "grey70") +
   geom_point(size = 3) +
   geom_errorbar(aes(ymin = pEC50_mean - pEC50_sd,
@@ -792,28 +799,51 @@ cat("Tables:", tab_dir, "\n")
 cat("Model:", mod_dir, "\n")
 
 # =============================================================================
-# 15. BLISS INDEPENDENCE ANALYSIS — TEMPERATURE × FUNGICIDE INTERACTION
+# 15. CLASSICAL BLISS INDEPENDENCE ANALYSIS
+#     Temperature × Fungicide Interaction
 # =============================================================================
-# Quantify whether high temperature and antifungal stress act synergistically,
-# additively, or antagonistically on fungal growth rate using Bliss independence.
+# Classical Bliss Independence treats temperature stress and fungicide as
+# two independent stressors acting on fungal growth. If they act through
+# independent pathways, the combined fractional survival is the PRODUCT
+# of the individual fractional survivals:
 #
-# Bliss independence assumes temperature and fungicide stress act through
-# independent pathways, so their fractional effects multiply.
-# delta < 0 → synergy (fungicide more effective than expected)
-# delta > 0 → antagonism (fungicide less effective than expected)
+#   f_expected(T, conc) = f_T(T) × f_F(conc)
+#
+# where:
+#   f_T(T) = growth(T, conc=0) / growth(T_opt, conc=0)
+#          = fractional effect of temperature stress alone
+#          = 1 at T_opt (no thermal stress), < 1 elsewhere
+#
+#   f_F(conc) = growth(T_opt, conc) / growth(T_opt, conc=0)
+#             = fractional effect of fungicide alone, measured at
+#               the thermal optimum where temperature imposes no stress
+#
+#   f_obs(T, conc) = growth(T, conc) / growth(T_opt, conc=0)
+#                  = observed combined fractional survival
+#
+# The Bliss deviation is:
+#   delta = f_obs - f_expected = f_obs - f_T × f_F
+#
+#   delta < 0 → Synergy: combined effect is WORSE than expected
+#               (fungicide + thermal stress interact to suppress growth
+#                more than the product of individual effects)
+#   delta > 0 → Antagonism: combined effect is LESS than expected
+#   delta = 0 → Independence (Bliss additivity)
+#
+# The thermal optimum is the natural reference because:
+#   - At T_opt, f_T = 1 (no temperature stress)
+#   - This cleanly isolates the fungicide effect at T_opt
+#   - The reference is biologically principled, not arbitrary
 
-cat("\n\n========== BLISS INDEPENDENCE ANALYSIS ==========\n\n")
+cat("\n\n========== CLASSICAL BLISS INDEPENDENCE ANALYSIS ==========\n\n")
 
-# --- 15a. Identify reference temperature (highest baseline growth rate) -------
+# --- Output subdirectory for Bliss figures ------------------------------------
+bliss_fig_dir <- file.path(figures_dir, "bliss_independence")
+dir.create(bliss_fig_dir, showWarnings = FALSE, recursive = TRUE)
 
-r0_medians <- r0_draws %>%
-  group_by(temperature) %>%
-  summarise(r0_med = median(value), .groups = "drop")
-T_ref <- r0_medians$temperature[which.max(r0_medians$r0_med)]
-cat("Reference temperature (highest r0):", as.character(T_ref), "°C\n")
+# --- 15a. Identify T_opt (temperature with highest baseline growth rate) ------
 
-# --- 15b. Join parameter draws into a single wide frame ----------------------
-
+# Join Hill parameter draws into a single wide frame
 param_draws <- r0_draws %>%
   rename(r0 = value) %>%
   left_join(ec50_draws %>% rename(ec50 = value),
@@ -821,53 +851,109 @@ param_draws <- r0_draws %>%
   left_join(n_draws %>% rename(n_hill = value),
             by = c(".draw", "temperature"))
 
-# --- 15c. Compute pointwise Bliss deviation on posterior draws ----------------
+# T_opt = temperature with the highest median r0 (baseline growth at conc = 0)
+r0_medians <- r0_draws %>%
+  group_by(temperature) %>%
+  summarise(r0_med = median(value), .groups = "drop")
+T_opt <- r0_medians$temperature[which.max(r0_medians$r0_med)]
+cat("Thermal optimum (highest baseline growth rate):", as.character(T_opt), "\u00b0C\n")
+
+# --- 15b. Compute fractional survivals on posterior draws ---------------------
+# For each draw, compute:
+#   r0_opt       = baseline growth at T_opt (from r0 draws)
+#   f_T(T)       = r0(T) / r0_opt           — temperature stress alone
+#   f_F(conc)    = Hill fraction at T_opt    — fungicide alone at T_opt
+#   f_obs(T,c)   = r0(T) × Hill(T,c) / r0_opt — observed combined
 
 # Non-zero concentrations from the data
 conc_levels <- sort(unique(dat$conc[dat$conc > 0]))
 
+# Get r0 at T_opt for each draw
+r0_opt_draws <- param_draws %>%
+  filter(temperature == T_opt) %>%
+  select(.draw, r0_opt = r0, ec50_opt = ec50, n_opt = n_hill)
+
+# Compute all three fractional survivals
 bliss_draws <- param_draws %>%
-  # Attach reference temperature parameters for each draw
-  left_join(
-    param_draws %>%
-      filter(temperature == T_ref) %>%
-      select(.draw, r0_ref = r0, ec50_ref = ec50, n_ref = n_hill),
-    by = ".draw"
-  ) %>%
-  # Expand across concentrations
+  left_join(r0_opt_draws, by = ".draw") %>%
   crossing(conc = conc_levels) %>%
   mutate(
-    # Fractional effect at this temperature (Hill dose-response)
-    f_obs = 1 / (1 + (conc / ec50)^n_hill),
-    # Fractional effect at reference temperature
-    f_ref = 1 / (1 + (conc / ec50_ref)^n_ref),
+    # Hill fractional survival at this temperature and dose
+    hill_frac = 1 / (1 + (conc / ec50)^n_hill),
+    # Hill fractional survival at T_opt (fungicide effect alone)
+    hill_frac_opt = 1 / (1 + (conc / ec50_opt)^n_opt),
+    
+    # f_T: fractional effect of temperature stress alone (conc = 0)
+    f_T = r0 / r0_opt,
+    
+    # f_F: fractional effect of fungicide alone (at T_opt)
+    f_F = hill_frac_opt,
+    
+    # f_obs: observed combined fractional survival
+    f_obs = (r0 * hill_frac) / r0_opt,
+    
+    # Bliss expected: product of independent effects
+    f_expected = f_T * f_F,
+    
     # Bliss deviation: negative = synergy, positive = antagonism
-    delta  = f_obs - f_ref
+    delta = f_obs - f_expected
   )
 
-# --- 15d. Summarise Bliss deviation -------------------------------------------
+# --- 15c. Summarise pointwise Bliss deviation ---------------------------------
 
 bliss_summary <- bliss_draws %>%
   group_by(temperature, conc) %>%
   summarise(
-    delta_mean   = mean(delta),
-    delta_median = median(delta),
-    delta_lower  = quantile(delta, 0.025),
-    delta_upper  = quantile(delta, 0.975),
+    f_T_mean         = mean(f_T),
+    f_F_mean         = mean(f_F),
+    f_obs_mean       = mean(f_obs),
+    f_expected_mean  = mean(f_expected),
+    delta_mean       = mean(delta),
+    delta_median     = median(delta),
+    delta_lower      = quantile(delta, 0.025),
+    delta_upper      = quantile(delta, 0.975),
     prob_synergy     = mean(delta < 0),
     prob_antagonism  = mean(delta > 0),
     .groups = "drop"
   )
 
-cat("\n--- Pointwise Bliss deviation summary ---\n")
+cat("\n--- Pointwise Bliss deviation summary (classical Bliss Independence) ---\n")
+cat("Reference: T_opt =", as.character(T_opt), "\u00b0C (highest baseline growth)\n")
+cat("f_T = temperature stress alone; f_F = fungicide alone at T_opt\n")
+cat("f_expected = f_T × f_F; delta = f_obs - f_expected\n")
+cat("delta < 0 → synergy; delta > 0 → antagonism\n\n")
 print(bliss_summary)
 write_csv(bliss_summary, file.path(tab_dir, "08_bliss_deviation_pointwise.csv"))
 
-# --- 15e. Figure 19: Bliss deviation vs temperature, coloured by dose --------
+# --- 15d. Figure 18: Observed vs expected fractional survival -----------------
+# Diagnostic plot: if Bliss holds, points should lie on the diagonal
+
+diag_data <- bliss_summary %>%
+  mutate(temp_num = as.numeric(as.character(temperature)))
+
+p18 <- ggplot(diag_data, aes(x = f_expected_mean, y = f_obs_mean,
+                             colour = temperature)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey50") +
+  geom_point(aes(size = conc), alpha = 0.7) +
+  scale_colour_manual(values = temp_pal, name = "Temperature (\u00b0C)") +
+  scale_size_continuous(name = "Dose (mg/L)", range = c(1.5, 4)) +
+  labs(
+    x = expression("Expected fractional survival (f"[T]~"\u00d7"~"f"[F]*")"),
+    y = expression("Observed fractional survival (f"[obs]*")"),
+    title = "Bliss Independence diagnostic",
+    subtitle = paste0("Diagonal = independence. Points below = synergy, above = antagonism. T_opt = ",
+                      T_opt, "\u00b0C")
+  ) +
+  coord_equal(xlim = c(0, 1.05), ylim = c(0, 1.05)) +
+  theme_bw(base_size = 13)
+ggsave(file.path(bliss_fig_dir, "18_bliss_observed_vs_expected.png"),
+       p18, width = 8, height = 7, dpi = 300)
+
+# --- 15e. Figure 19: Bliss deviation vs temperature, coloured by dose ---------
 
 p19 <- ggplot(bliss_summary, aes(x = as.numeric(as.character(temperature)),
-                                  y = delta_mean,
-                                  colour = factor(conc))) +
+                                 y = delta_mean,
+                                 colour = factor(conc))) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
   geom_ribbon(aes(ymin = delta_lower, ymax = delta_upper,
                   fill = factor(conc)),
@@ -883,11 +969,12 @@ p19 <- ggplot(bliss_summary, aes(x = as.numeric(as.character(temperature)),
   labs(
     x = "Temperature (\u00b0C)",
     y = expression(Delta~"(Bliss deviation)"),
-    title = "Bliss Independence: temperature \u00d7 fungicide interaction",
-    subtitle = expression(Delta~"= observed fractional effect \u2212 expected under independence. Dashed = additivity.")
+    title = "Classical Bliss Independence: temperature \u00d7 fungicide interaction",
+    subtitle = bquote(Delta == f[obs] - f[T] %*% f[F] ~
+                        "; dashed = independence. T"[opt] == .(as.character(T_opt)) * "\u00b0C")
   ) +
   theme_bw(base_size = 13)
-ggsave(file.path(fig_dir, "19_bliss_deviation_by_temperature.png"),
+ggsave(file.path(bliss_fig_dir, "19_bliss_deviation_by_temperature.png"),
        p19, width = 8, height = 5, dpi = 300)
 
 # --- 15f. Figure 20: P(synergy) heatmap --------------------------------------
@@ -904,13 +991,14 @@ p20 <- ggplot(bliss_summary,
   labs(
     x = "Prothioconazole (mg/L)",
     y = "Temperature (\u00b0C)",
-    title = "Posterior probability of synergy",
-    subtitle = "P(\u0394 < 0) at each temperature \u00d7 dose combination"
+    title = "Posterior probability of synergy (classical Bliss Independence)",
+    subtitle = bquote("P("*Delta < 0*"): combined effect worse than" ~ f[T] %*% f[F] ~
+                        ". T"[opt] == .(as.character(T_opt)) * "\u00b0C")
   ) +
   theme_minimal(base_size = 13) +
   theme(panel.grid = element_blank()) +
   coord_equal()
-ggsave(file.path(fig_dir, "20_bliss_prob_synergy_heatmap.png"),
+ggsave(file.path(bliss_fig_dir, "20_bliss_prob_synergy_heatmap.png"),
        p20, width = 8, height = 7, dpi = 300)
 
 # --- 15g. Figure 21: Mean delta heatmap --------------------------------------
@@ -926,13 +1014,13 @@ p21 <- ggplot(bliss_summary,
   labs(
     x = "Prothioconazole (mg/L)",
     y = "Temperature (\u00b0C)",
-    title = "Mean Bliss deviation",
+    title = "Mean Bliss deviation (classical Bliss Independence)",
     subtitle = "Blue = synergy (\u0394 < 0), Red = antagonism (\u0394 > 0)"
   ) +
   theme_minimal(base_size = 13) +
   theme(panel.grid = element_blank()) +
   coord_equal()
-ggsave(file.path(fig_dir, "21_bliss_delta_heatmap.png"),
+ggsave(file.path(bliss_fig_dir, "21_bliss_delta_heatmap.png"),
        p21, width = 8, height = 7, dpi = 300)
 
 # =============================================================================
@@ -1077,36 +1165,20 @@ ggsave(file.path(fig_dir, "22_model_comparison_interaction.png"),
        p22, width = 8, height = 4, dpi = 300)
 
 # =============================================================================
-# 17. TEMPERATURE-SPECIFIC INTERACTION INDEX
+# 17. TEMPERATURE-SPECIFIC INTERACTION INDEX (Classical Bliss)
 # =============================================================================
 # Integrate Bliss deviation across all concentrations at each temperature
 # to get a single number summarising net interaction strength.
-# I(T) = (1/c_max) × ∫₀^c_max [f_obs(c,T) - f_ref(c)] dc
-# Computed via trapezoidal rule on posterior draws.
+# I(T) = mean_conc[delta(T, conc)]
+#       = mean_conc[f_obs(T,c) - f_T(T) × f_F(c)]
+# Computed on posterior draws.
 
-cat("\n--- Computing temperature-specific interaction index ---\n")
+cat("\n--- Computing temperature-specific interaction index (classical Bliss) ---\n")
 
-# Fine concentration grid for numerical integration
-conc_fine <- seq(0, 4, length.out = 200)
-c_max <- max(conc_fine)
-
-interaction_index_draws <- param_draws %>%
-  left_join(
-    param_draws %>%
-      filter(temperature == T_ref) %>%
-      select(.draw, ec50_ref = ec50, n_ref = n_hill),
-    by = ".draw"
-  ) %>%
-  # For each draw × temperature, integrate delta over concentration
+interaction_index_draws <- bliss_draws %>%
   group_by(.draw, temperature) %>%
   summarise(
-    I_T = {
-      f_obs_vec <- 1 / (1 + (conc_fine / ec50[1])^n_hill[1])
-      f_ref_vec <- 1 / (1 + (conc_fine / ec50_ref[1])^n_ref[1])
-      delta_vec <- f_obs_vec - f_ref_vec
-      # Trapezoidal integration, normalised by c_max
-      (1 / c_max) * sum(diff(conc_fine) * (head(delta_vec, -1) + tail(delta_vec, -1)) / 2)
-    },
+    I_T = mean(delta),
     .groups = "drop"
   )
 
@@ -1115,25 +1187,26 @@ interaction_index_draws <- param_draws %>%
 interaction_summary <- interaction_index_draws %>%
   group_by(temperature) %>%
   summarise(
-    I_mean   = mean(I_T),
-    I_median = median(I_T),
-    I_lower  = quantile(I_T, 0.025),
-    I_upper  = quantile(I_T, 0.975),
+    I_mean          = mean(I_T),
+    I_median        = median(I_T),
+    I_lower         = quantile(I_T, 0.025),
+    I_upper         = quantile(I_T, 0.975),
     prob_synergy    = mean(I_T < 0),
     prob_antagonism = mean(I_T > 0),
     .groups = "drop"
   )
 
-cat("\n--- Interaction index by temperature ---\n")
-cat("I(T) < 0 → net synergy (fungicide more effective than expected)\n")
-cat("I(T) > 0 → net antagonism. Reference temperature:", as.character(T_ref), "°C\n\n")
+cat("\n--- Interaction index by temperature (classical Bliss) ---\n")
+cat("I(T) < 0 → net synergy (combined effect worse than f_T × f_F)\n")
+cat("I(T) > 0 → net antagonism (combined effect less bad than f_T × f_F)\n")
+cat("T_opt =", as.character(T_opt), "\u00b0C (by definition, I(T_opt) = 0)\n\n")
 print(interaction_summary)
 write_csv(interaction_summary, file.path(tab_dir, "10_interaction_index_by_temperature.csv"))
 
 # --- 17b. Figure 23: Interaction index point-and-interval plot ----------------
 
 p23 <- ggplot(interaction_summary, aes(x = temperature, y = I_median,
-                                        colour = temperature)) +
+                                       colour = temperature)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
   geom_pointinterval(aes(ymin = I_lower, ymax = I_upper), size = 3) +
   scale_colour_manual(values = temp_pal, guide = "none") +
@@ -1144,17 +1217,21 @@ p23 <- ggplot(interaction_summary, aes(x = temperature, y = I_median,
   labs(
     x = "Temperature (\u00b0C)",
     y = "Interaction index I(T)",
-    title = "Temperature-specific interaction index (Bliss framework)",
-    subtitle = paste0("Integrated Bliss deviation across doses. Reference: ", T_ref, "\u00b0C")
+    title = "Temperature-specific interaction index (classical Bliss Independence)",
+    subtitle = bquote("Mean Bliss deviation across doses. T"[opt] == .(as.character(T_opt)) *
+                        "\u00b0C. I = 0 under independence.")
   ) +
   theme_bw(base_size = 13)
-ggsave(file.path(fig_dir, "23_interaction_index_by_temperature.png"),
+ggsave(file.path(bliss_fig_dir, "23_interaction_index_by_temperature.png"),
        p23, width = 7, height = 5, dpi = 300)
 
 # --- 17c. Figure 24: Posterior density of I(T) by temperature -----------------
+# NOTE: T_opt is excluded because delta = 0 by construction at T_opt
+# (f_T = 1, so f_expected = f_F = f_obs), creating a Dirac spike at zero
+# that crushes all other densities off the visible y-axis.
 
-p24 <- ggplot(interaction_index_draws, aes(x = I_T, fill = temperature,
-                                            colour = temperature)) +
+p24 <- ggplot(interaction_index_draws %>% filter(temperature != T_opt),
+              aes(x = I_T, fill = temperature, colour = temperature)) +
   geom_density(alpha = 0.3) +
   geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
   scale_fill_manual(values = temp_pal, name = "Temp (\u00b0C)") +
@@ -1163,15 +1240,17 @@ p24 <- ggplot(interaction_index_draws, aes(x = I_T, fill = temperature,
     x = "Interaction index I(T)",
     y = "Posterior density",
     title = "Posterior distribution of interaction index by temperature",
-    subtitle = "Dashed line = additivity (I = 0)"
+    subtitle = bquote("Dashed = independence (I = 0). T"[opt]~"("*.(as.character(T_opt))*
+                        "\u00b0C) excluded (I = 0 by construction).")
   ) +
   theme_bw(base_size = 13)
-ggsave(file.path(fig_dir, "24_interaction_index_density.png"),
+ggsave(file.path(bliss_fig_dir, "24_interaction_index_density.png"),
        p24, width = 8, height = 5, dpi = 300)
 
 # --- 17d. Figure 25: P(synergy) vs P(antagonism) stacked bar chart -----------
 
 interaction_bar <- interaction_summary %>%
+  filter(temperature != T_opt) %>%
   select(temperature, prob_synergy, prob_antagonism) %>%
   pivot_longer(cols = c(prob_synergy, prob_antagonism),
                names_to = "direction", values_to = "probability") %>%
@@ -1179,7 +1258,7 @@ interaction_bar <- interaction_summary %>%
          direction = factor(direction, levels = c("Antagonism", "Synergy")))
 
 p25 <- ggplot(interaction_bar, aes(x = temperature, y = probability,
-                                    fill = direction)) +
+                                   fill = direction)) +
   geom_col(width = 0.7) +
   geom_hline(yintercept = 0.5, linetype = "dashed", colour = "grey50") +
   scale_fill_manual(values = c("Synergy" = "#2166AC", "Antagonism" = "#B2182B"),
@@ -1188,10 +1267,11 @@ p25 <- ggplot(interaction_bar, aes(x = temperature, y = probability,
     x = "Temperature (\u00b0C)",
     y = "Posterior probability",
     title = "Evidence for synergy vs antagonism by temperature",
-    subtitle = "Stacked bars; dashed line = equal probability"
+    subtitle = bquote("Classical Bliss Independence. T"[opt]~"("*.(as.character(T_opt))*
+                        "\u00b0C) excluded (I = 0 by construction).")
   ) +
   theme_bw(base_size = 13)
-ggsave(file.path(fig_dir, "25_interaction_index_prob_barplot.png"),
+ggsave(file.path(bliss_fig_dir, "25_interaction_index_prob_barplot.png"),
        p25, width = 7, height = 5, dpi = 300)
 
 # =============================================================================
@@ -1209,23 +1289,25 @@ bliss_full_summary <- interaction_summary %>%
     )
   )
 
-cat("\n--- Combined interaction summary ---\n")
+cat("\n--- Combined interaction summary (classical Bliss Independence) ---\n")
+cat("T_opt =", as.character(T_opt), "\u00b0C\n")
+cat("f_expected = f_T(T) × f_F(conc); delta = f_obs - f_expected\n\n")
 print(bliss_full_summary)
 cat("\nLOO model comparison:\n")
 print(comp_interaction)
 write_csv(bliss_full_summary, file.path(tab_dir, "11_interaction_summary.csv"))
 
-cat("\n--- Bliss independence analysis complete ---\n")
+cat("\n--- Classical Bliss independence analysis complete ---\n")
 
 # #############################################################################
 #
-#  RESPIRATION RATE ANALYSIS — POWER LAW
+#  RESPIRATION RATE ANALYSIS — LOG-LINEAR MODEL
 #
 # #############################################################################
-# Model: log(resp) = log(a) + b * log(conc), i.e. resp = a * conc^b
-# Fitted as a linear model on the log-log scale using non-zero concentrations.
-# The intercept log(a) = log(respiration at 1 mg/L).
-# The slope b = power-law exponent (rate of increase with dose).
+# Model: log(resp) = intercept + slope * conc
+# Equivalent to: resp = a * exp(b * conc)
+#   a = exp(intercept) = baseline respiration at zero concentration
+#   b = slope = rate of change of log-respiration per mg/L
 # Both vary by temperature; replicate random intercepts capture between-
 # replicate variation.
 
@@ -1330,12 +1412,6 @@ ggsave(file.path(fig_dir_resp, "04_resp_vs_conc_loglog_faceted.png"),
 # =============================================================================
 # R3. FIT LOG-LINEAR MODEL
 # =============================================================================
-# log(resp) = intercept + slope * conc
-# Equivalent to: resp = a * exp(b * conc)
-#   a = exp(intercept) = baseline respiration at zero concentration
-#   b = slope = rate of change of log-respiration per mg/L
-# All data including zero-concentration controls are used.
-# slope > 0 means respiration increases with dose.
 
 cat("\n--- Fitting log-linear model for respiration ---\n")
 
@@ -1360,12 +1436,6 @@ write_csv(resp_fixed, file.path(tab_dir_resp, "02_loglinear_parameters.csv"))
 # =============================================================================
 # R4. EXTRACT INTERCEPT AND SLOPE BY TEMPERATURE
 # =============================================================================
-
-# Temperature contrasts: 15°C is the reference level
-# Intercept at each temperature = b_Intercept + b_temperatureXX
-#   → exp(intercept) = baseline respiration at conc = 0
-# Slope at each temperature = b_conc + b_conc:temperatureXX
-#   → rate of increase of log(resp) per mg/L prothioconazole
 
 resp_draws <- as_draws_df(fit_resp)
 
@@ -1439,7 +1509,7 @@ write_csv(resp_param_tbl, file.path(tab_dir_resp, "03_loglinear_params_by_temper
 # --- 05: Slope by temperature -------------------------------------------------
 
 r05 <- ggplot(slope_summary, aes(x = temperature, y = slope,
-                                  colour = temperature)) +
+                                 colour = temperature)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
   geom_pointinterval(aes(ymin = .lower, ymax = .upper), size = 3) +
   scale_colour_manual(values = temp_pal, guide = "none") +
@@ -1456,7 +1526,7 @@ ggsave(file.path(fig_dir_resp, "05_slope_by_temperature.png"),
 # --- 06: Slope posterior densities -------------------------------------------
 
 r06 <- ggplot(slope_draws, aes(x = slope, fill = temperature,
-                                colour = temperature)) +
+                               colour = temperature)) +
   geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
   geom_density(alpha = 0.35, linewidth = 0.6) +
   scale_fill_manual(values = temp_pal, name = "Temperature (°C)") +
@@ -1488,7 +1558,7 @@ ggsave(file.path(fig_dir_resp, "07_baseline_by_temperature.png"),
 # --- 08: Baseline posterior densities -----------------------------------------
 
 r08 <- ggplot(a_draws, aes(x = a, fill = temperature,
-                            colour = temperature)) +
+                           colour = temperature)) +
   geom_density(alpha = 0.35, linewidth = 0.6) +
   scale_fill_manual(values = temp_pal, name = "Temperature (°C)") +
   scale_colour_manual(values = temp_pal, name = "Temperature (°C)") +
@@ -1669,7 +1739,7 @@ slope_report_plot <- slope_report %>%
                               levels = c("15", "18", "21", "24", "26", "27", "28", "Global")))
 
 pb_resp <- ggplot(slope_report_plot, aes(x = temperature, y = slope_mean,
-                                          colour = temperature)) +
+                                         colour = temperature)) +
   geom_vline(xintercept = 7.5, linetype = "dashed", colour = "grey70") +
   geom_hline(yintercept = 0, linetype = "dotted", colour = "grey70") +
   geom_point(size = 3) +
